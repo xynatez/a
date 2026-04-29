@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAVEFETCH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080810;
+      --surface: #0f0f1a;
+      --surface2: #161624;
+      --border: #1e1e32;
+      --accent: #ff5f1f;
+      --accent2: #ff8c55;
+      --text: #e4e4f0;
+      --muted: #5a5a80;
+      --dim: #2a2a42;
+      --glow: rgba(255, 95, 31, 0.18);
+      --cyan: #00e5cc;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* Grid noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 39px, var(--border) 39px, var(--border) 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, var(--border) 39px, var(--border) 40px);
+      opacity: 0.25;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative; z-index: 1;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 0 20px 120px;
+      min-height: 100vh;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      padding: 40px 0 32px;
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 52px;
+      letter-spacing: 6px;
+      line-height: 1;
+      color: var(--accent);
+      text-shadow: 0 0 40px var(--glow);
+    }
+
+    .logo-sub {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding-bottom: 8px;
+    }
+
+    /* ─── SEARCH ─── */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 28px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px 54px 14px 18px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--glow), inset 0 0 20px rgba(255,95,31,0.04);
+    }
+
+    .search-input::placeholder { color: var(--muted); }
+
+    .search-btn {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: var(--accent);
+      border: none; border-radius: 3px;
+      width: 34px; height: 34px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, transform .1s;
+    }
+    .search-btn:hover { background: var(--accent2); }
+    .search-btn:active { transform: translateY(-50%) scale(0.92); }
+    .search-btn svg { width: 16px; height: 16px; fill: #fff; }
+
+    /* ─── STATUS BAR ─── */
+    .status {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      min-height: 16px;
+      transition: color .3s;
+    }
+    .status.loading { color: var(--accent); }
+    .status.error { color: #ff4444; }
+    .status.ok { color: var(--cyan); }
+
+    /* ─── RESULTS ─── */
+    .results {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, transform .1s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .result-item::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      transform: scaleY(0);
+      transition: transform .2s;
+    }
+
+    .result-item:hover {
+      border-color: var(--dim);
+      background: var(--surface2);
+    }
+
+    .result-item:hover::before { transform: scaleY(1); }
+
+    .result-item.active {
+      border-color: var(--accent);
+      background: var(--surface2);
+    }
+    .result-item.active::before { transform: scaleY(1); }
+
+    .result-item.loading-track {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .result-num {
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 20px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .result-info { flex: 1; min-width: 0; }
+
+    .result-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+
+    .result-meta {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-dur {
+      font-size: 11px;
+      color: var(--dim);
+      flex-shrink: 0;
+    }
+
+    .result-icon {
+      width: 28px; height: 28px;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .result-icon svg { width: 20px; height: 20px; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--dim);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    /* ─── PLAYER ─── */
+    .player {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(8, 8, 16, 0.97);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      padding: 16px 24px 18px;
+      z-index: 100;
+      transform: translateY(100%);
+      transition: transform .35s cubic-bezier(.16,1,.3,1);
+    }
+
+    .player.visible { transform: translateY(0); }
+
+    .player-inner {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .player-track {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .player-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 60%;
+    }
+
+    .player-badges {
+      display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+    }
+
+    .badge {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+
+    .badge-mem {
+      color: var(--cyan);
+      border-color: var(--cyan);
+      opacity: 0.7;
+    }
+
+    .badge-loop {
+      color: var(--muted);
+      border-color: var(--dim);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      user-select: none;
+    }
+    .badge-loop:hover { color: var(--text); border-color: var(--muted); }
+    .badge-loop.on {
+      color: var(--accent);
+      border-color: var(--accent);
+      opacity: 1;
+      text-shadow: 0 0 10px var(--glow);
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      position: relative;
+      height: 3px;
+      background: var(--dim);
+      border-radius: 2px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width .1s linear;
+      box-shadow: 0 0 8px var(--glow);
+    }
+
+    .progress-thumb {
+      position: absolute;
+      top: 50%; transform: translate(-50%, -50%);
+      width: 10px; height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      left: 0%;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+
+    .progress-wrap:hover .progress-thumb { opacity: 1; }
+
+    /* Controls */
+    .player-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ctrl-left { display: flex; align-items: center; gap: 12px; }
+
+    .ctrl-btn {
+      background: none;
+      border: 1px solid var(--dim);
+      border-radius: 3px;
+      color: var(--muted);
+      padding: 6px 10px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: all .15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ctrl-btn:hover { border-color: var(--muted); color: var(--text); }
+    .ctrl-btn svg { width: 14px; height: 14px; }
+
+    .ctrl-play {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      padding: 7px 18px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .ctrl-play:hover { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+
+    .ctrl-time {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+
+    /* ─── ANIMATIONS ─── */
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-item {
+      animation: fadeSlide .2s ease both;
+    }
+
+    /* waveform bars on active */
+    .wave-bars {
+      display: flex; gap: 2px; align-items: flex-end; height: 16px;
+    }
+    .wave-bars span {
+      display: block; width: 3px; background: var(--accent);
+      border-radius: 2px;
+    }
+    @keyframes waveAnim {
+      0%, 100% { height: 4px; }
+      50%       { height: 14px; }
+    }
+    .wave-bars span:nth-child(1) { animation: waveAnim 0.8s ease-in-out infinite; height: 6px; }
+    .wave-bars span:nth-child(2) { animation: waveAnim 0.8s ease-in-out infinite .15s; height: 10px; }
+    .wave-bars span:nth-child(3) { animation: waveAnim 0.8s ease-in-out infinite .3s; height: 5px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+    .empty-state .big { font-family: 'Bebas Neue', sans-serif; font-size: 40px; color: var(--dim); letter-spacing: 4px; display: block; margin-bottom: 10px; }
+
+    @media (max-width: 500px) {
+      .logo { font-size: 36px; }
+      .player { padding: 12px 16px 16px; }
+      .player-title { max-width: 55%; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div>
+      <div class="logo">WAVEFETCH</div>
+    </div>
+    <div class="logo-sub">YT Audio · Browser Only · No Trace</div>
+  </header>
+
+  <div class="search-wrap">
+    <input
+      type="text"
+      class="search-input"
+      id="searchInput"
+      placeholder="Cari judul lagu, artis, album..."
+      autocomplete="off"
+    />
+    <button class="search-btn" id="searchBtn">
+      <svg viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <div class="status" id="status">// siap mencari</div>
+
+  <div class="results" id="results">
+    <div class="empty-state">
+      <span class="big">SEARCH</span>
+      ketik judul lagu atau nama artis di atas
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER -->
+<div class="player" id="player">
+  <div class="player-inner">
+    <div class="player-track">
+      <div class="player-title" id="playerTitle">—</div>
+      <div class="player-badges">
+        <span class="badge badge-mem">RAM ONLY</span>
+        <span class="badge badge-loop" id="loopBadge" title="Toggle Loop">↻ LOOP</span>
+      </div>
+    </div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-fill" id="progressFill"></div>
+      <div class="progress-thumb" id="progressThumb"></div>
+    </div>
+    <div class="player-controls">
+      <div class="ctrl-left">
+        <button class="ctrl-btn ctrl-play" id="playPauseBtn">
+          <svg id="playIcon" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+          <span id="playLabel">PLAY</span>
+        </button>
+        <span class="ctrl-time" id="ctrlTime">0:00 / 0:00</span>
+      </div>
+      <div>
+        <button class="ctrl-btn" id="stopBtn">
+          <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+          STOP
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audioEl" style="display:none"></audio>
+
+<script>
+// ───────────────────────────────────────────────────────
+// CONFIG
+// ───────────────────────────────────────────────────────
+const INVIDIOUS_INSTANCES = [
+  'https://inv.nadeko.net',
+  'https://invidious.privacydev.net',
+  'https://yt.cdaut.de',
+  'https://invidious.nerdvpn.de',
+  'https://invidious.slipfox.xyz',
+];
+
+const COBALT_API = 'https://api.cobalt.tools/';
+
+// ───────────────────────────────────────────────────────
+// STATE
+// ───────────────────────────────────────────────────────
+let currentBlobUrl  = null;
+let currentVideoId  = null;
+let isLooping       = false;
+let isDragging      = false;
+
+const audioEl        = document.getElementById('audioEl');
+const playerEl       = document.getElementById('player');
+const playerTitle    = document.getElementById('playerTitle');
+const progressFill   = document.getElementById('progressFill');
+const progressThumb  = document.getElementById('progressThumb');
+const progressWrap   = document.getElementById('progressWrap');
+const playPauseBtn   = document.getElementById('playPauseBtn');
+const playIcon       = document.getElementById('playIcon');
+const playLabel      = document.getElementById('playLabel');
+const ctrlTime       = document.getElementById('ctrlTime');
+const loopBadge      = document.getElementById('loopBadge');
+const stopBtn        = document.getElementById('stopBtn');
+const statusEl       = document.getElementById('status');
+const resultsEl      = document.getElementById('results');
+const searchInput    = document.getElementById('searchInput');
+const searchBtn      = document.getElementById('searchBtn');
+
+// ───────────────────────────────────────────────────────
+// HELPERS
+// ───────────────────────────────────────────────────────
+function formatDur(sec) {
+  if (!sec || isNaN(sec)) return '--:--';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+function setStatus(msg, type='') {
+  statusEl.textContent = '// ' + msg;
+  statusEl.className   = 'status ' + type;
+}
+
+function clearPreviousAudio() {
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = null;
+  }
+  audioEl.pause();
+  audioEl.src = '';
+}
+
+// ───────────────────────────────────────────────────────
+// SEARCH
+// ───────────────────────────────────────────────────────
+async function searchInvidious(query) {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,lengthSeconds&hl=id`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch { /* try next instance */ }
+  }
+  throw new Error('Semua server tidak merespon. Coba lagi nanti.');
+}
+
+async function doSearch() {
+  const q = searchInput.value.trim();
+  if (!q) return;
+
+  setStatus('mencari...', 'loading');
+  resultsEl.innerHTML = '';
+
+  try {
+    const results = await searchInvidious(q);
+    setStatus(`${results.length} hasil ditemukan`, 'ok');
+    renderResults(results);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    resultsEl.innerHTML = `<div class="empty-state" style="color:#ff4444">${e.message}</div>`;
+  }
+}
+
+// ───────────────────────────────────────────────────────
+// RENDER RESULTS
+// ───────────────────────────────────────────────────────
+function renderResults(items) {
+  resultsEl.innerHTML = '';
+  items.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'result-item';
+    el.style.animationDelay = `${i * 35}ms`;
+    el.dataset.id    = item.videoId;
+    el.dataset.title = item.title;
+
+    el.innerHTML = `
+      <span class="result-num">${String(i+1).padStart(2,'0')}</span>
+      <div class="result-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5">
+          <circle cx="12" cy="12" r="9"/>
+          <polygon points="10,8 16,12 10,16" fill="var(--muted)" stroke="none"/>
+        </svg>
+      </div>
+      <div class="result-info">
+        <div class="result-title">${escHtml(item.title)}</div>
+        <div class="result-meta">${escHtml(item.author || '')}</div>
+      </div>
+      <span class="result-dur">${formatDur(item.lengthSeconds)}</span>
+    `;
+
+    el.addEventListener('click', () => loadTrack(item.videoId, item.title, el));
+    resultsEl.appendChild(el);
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ───────────────────────────────────────────────────────
+// LOAD TRACK via COBALT
+// ───────────────────────────────────────────────────────
+async function loadTrack(videoId, title, el) {
+  if (videoId === currentVideoId) {
+    togglePlayPause(); return;
+  }
+
+  // Mark loading
+  document.querySelectorAll('.result-item').forEach(r => r.classList.remove('active','loading-track'));
+  el.classList.add('loading-track');
+  el.querySelector('.result-icon').innerHTML = '<div class="spinner"></div>';
+
+  setStatus(`mengambil audio: ${title.slice(0,40)}...`, 'loading');
+  clearPreviousAudio();
+  currentVideoId = null;
+
+  try {
+    // Step 1: Get download URL from cobalt
+    const cobaltRes = await fetch(COBALT_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3',
+        audioBitrate: '128',
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!cobaltRes.ok) throw new Error(`Cobalt error: ${cobaltRes.status}`);
+    const cobaltData = await cobaltRes.json();
+
+    if (cobaltData.status === 'error') throw new Error(cobaltData.error?.code || 'Download gagal');
+
+    const dlUrl = cobaltData.url;
+    if (!dlUrl) throw new Error('URL audio tidak ditemukan');
+
+    // Step 2: Fetch audio as blob (simpan di RAM)
+    setStatus('mengunduh audio ke memori...', 'loading');
+
+    const audioRes = await fetch(dlUrl, { signal: AbortSignal.timeout(60000) });
+    if (!audioRes.ok) throw new Error('Gagal mengunduh audio');
+
+    const blob = await audioRes.blob();
+    currentBlobUrl = URL.createObjectURL(blob);
+    currentVideoId = videoId;
+
+    // Step 3: Pasang ke audio element
+    audioEl.src       = currentBlobUrl;
+    audioEl.loop      = isLooping;
+    audioEl.preload   = 'auto';
+
+    await audioEl.play();
+
+    // Update UI
+    playerTitle.textContent = title;
+    playerEl.classList.add('visible');
+    setStatus(`▶ memutar: ${title.slice(0,50)}`, 'ok');
+
+    el.classList.remove('loading-track');
+    el.classList.add('active');
+    el.querySelector('.result-icon').innerHTML = `
+      <div class="wave-bars"><span></span><span></span><span></span></div>
+    `;
+
+    updatePlayIcon(true);
+
+    // MediaSession for background playback
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title,
+        artist: 'WAVEFETCH',
+      });
+      navigator.mediaSession.setActionHandler('play',  () => audioEl.play());
+      navigator.mediaSession.setActionHandler('pause', () => audioEl.pause());
+    }
+
+  } catch (e) {
+    setStatus('❌ ' + e.message, 'error');
+    el.classList.remove('loading-track');
+    el.querySelector('.result-icon').innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5">
+        <circle cx="12" cy="12" r="9"/>
+        <polygon points="10,8 16,12 10,16" fill="var(--muted)" stroke="none"/>
+      </svg>
+    `;
+    currentVideoId = null;
+  }
+}
+
+// ───────────────────────────────────────────────────────
+// AUDIO EVENTS
+// ───────────────────────────────────────────────────────
+audioEl.addEventListener('timeupdate', () => {
+  if (isDragging || !audioEl.duration) return;
+  const pct = (audioEl.currentTime / audioEl.duration) * 100;
+  progressFill.style.width  = pct + '%';
+  progressThumb.style.left  = pct + '%';
+  ctrlTime.textContent = `${formatDur(audioEl.currentTime)} / ${formatDur(audioEl.duration)}`;
+});
+
+audioEl.addEventListener('play',  () => updatePlayIcon(true));
+audioEl.addEventListener('pause', () => updatePlayIcon(false));
+
+audioEl.addEventListener('ended', () => {
+  if (!isLooping) {
+    updatePlayIcon(false);
+    setStatus('selesai diputar', '');
+    // Reset active icon
+    document.querySelectorAll('.result-item.active').forEach(r => {
+      r.querySelector('.result-icon').innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5">
+          <circle cx="12" cy="12" r="9"/>
+          <polygon points="10,8 16,12 10,16" fill="var(--muted)" stroke="none"/>
+        </svg>
+      `;
+      r.classList.remove('active');
+    });
+  }
+});
+
+function updatePlayIcon(playing) {
+  playLabel.textContent = playing ? 'PAUSE' : 'PLAY';
+  playIcon.innerHTML    = playing
+    ? '<rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/>'
+    : '<polygon points="5,3 19,12 5,21" fill="currentColor"/>';
+}
+
+// ───────────────────────────────────────────────────────
+// CONTROLS
+// ───────────────────────────────────────────────────────
+function togglePlayPause() {
+  if (!audioEl.src) return;
+  audioEl.paused ? audioEl.play() : audioEl.pause();
+}
+
+playPauseBtn.addEventListener('click', togglePlayPause);
+
+stopBtn.addEventListener('click', () => {
+  audioEl.pause();
+  audioEl.currentTime = 0;
+  updatePlayIcon(false);
+});
+
+loopBadge.addEventListener('click', () => {
+  isLooping = !isLooping;
+  audioEl.loop = isLooping;
+  loopBadge.classList.toggle('on', isLooping);
+});
+
+// Progress seek
+progressWrap.addEventListener('mousedown', e => {
+  isDragging = true;
+  seek(e);
+});
+document.addEventListener('mousemove', e => { if (isDragging) seek(e); });
+document.addEventListener('mouseup',   ()  => { isDragging = false; });
+
+progressWrap.addEventListener('touchstart', e => { isDragging = true; seek(e.touches[0]); }, { passive: true });
+document.addEventListener('touchmove',  e => { if (isDragging) seek(e.touches[0]); }, { passive: true });
+document.addEventListener('touchend',   ()  => { isDragging = false; });
+
+function seek(e) {
+  if (!audioEl.duration) return;
+  const rect = progressWrap.getBoundingClientRect();
+  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  audioEl.currentTime = pct * audioEl.duration;
+  progressFill.style.width = (pct * 100) + '%';
+  progressThumb.style.left = (pct * 100) + '%';
+}
+
+// ───────────────────────────────────────────────────────
+// KEYBOARD
+// ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target === searchInput) return;
+  if (e.code === 'Space')       { e.preventDefault(); togglePlayPause(); }
+  if (e.code === 'KeyL')        { loopBadge.click(); }
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+searchBtn.addEventListener('click', doSearch);
+
+// ───────────────────────────────────────────────────────
+// CLEANUP on close
+// ───────────────────────────────────────────────────────
+window.addEventListener('beforeunload', () => {
+  if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+});
+</script>
+</body>
+</html>
